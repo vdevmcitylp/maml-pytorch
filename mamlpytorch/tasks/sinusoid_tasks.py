@@ -18,11 +18,11 @@ class SinusoidTask:
 		self.min_x = min_x
 		self.max_x = max_x
 
-	def sample_batch(self, num_datapoints = 5):
+	def sample_batch(self, batch_size = 5):
 
 		# Returns a batch of datapoints from the given amplitude & phase
 
-		x = np.random.uniform(self.min_x, self.max_x, size = (num_datapoints, 1))
+		x = np.random.uniform(self.min_x, self.max_x, size = (batch_size, 1))
 		y = self.amplitude * np.sin(x + self.phase)
 
 		x = torch.FloatTensor(x)
@@ -57,12 +57,12 @@ class SinusoidTaskDistribution:
 
 		return SinusoidTask(amplitude, phase, self.min_x, self.max_x)
 
-	def sample_batch(self, num_tasks):
+	def sample_batch(self, batch_size):
 		'''
 		Returns a list of SinusoidTask objects
 		'''
 		tasks = []
-		for task_index in range(num_tasks):
+		for task_index in range(batch_size):
 			tasks.extend([self.sample_task()])
 
 		return tasks
@@ -70,8 +70,8 @@ class SinusoidTaskDistribution:
 if __name__ == '__main__':
 	
 	task_distribution = SinusoidTaskDistribution()
-	num_tasks = 2
-	tasks = task_distribution.sample_batch(num_tasks)
+	batch_size = 2
+	tasks = task_distribution.sample_batch(batch_size)
 
 	pdb.set_trace()
 	for task in tasks:

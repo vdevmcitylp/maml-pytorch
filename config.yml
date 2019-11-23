@@ -1,0 +1,14 @@
+
+dataset: sinusoid
+meta:
+  training_iterations: 100000
+  batch_size: 25
+  lr: 1.0e-3
+inner:
+  batch_size: 10
+  training_iterations: 1
+  lr: 1.0e-3
+logs:
+  val_interval: 100
+  print_interval: 50
+
