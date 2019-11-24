@@ -13,7 +13,7 @@ https://towardsdatascience.com/advances-in-few-shot-learning-reproducing-results
 
 
 TODO:
-[] Write meta-testing code
-[] Adding meta-training code in maml.py
-[] Write code for 2nd order MAML
-[] Write a notebook for better explanation (Required?)
+- [] Write meta-testing code
+- [] Adding meta-training code in maml.py
+- [] Write code for 2nd order MAML
+- [] Write a notebook for better explanation (Required?)
