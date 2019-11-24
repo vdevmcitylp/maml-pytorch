@@ -68,7 +68,7 @@ def main(cfg):
 			Step 6
 			'''
 			task_adapted_weights = OrderedDict(model.named_parameters())
-			y_support_pred = model.functional_forward(x_support, fast_weights)
+			y_support_pred = model.functional_forward(x_support, task_adapted_weights)
 			task_support_loss = loss_function(y_support_pred, y_support)
 			task_support_gradient = torch.autograd.grad(task_support_loss, task_adapted_weights.values())
 
