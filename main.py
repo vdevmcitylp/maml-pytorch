@@ -1,130 +1,157 @@
 
+import time
+import pdb
+import copy
+import yaml
 import argparse
 
+from collections import OrderedDict
+
 import torch
-import torch.optim as optim
 import torch.nn as nn
+import torch.optim as optim
+from torch.utils.tensorboard import SummaryWriter
 
 import numpy as np
 
-from mamlpytorch.tasks.sinusoid_tasks import create_sinusoid_tasks
+# import matplotlib
+# matplotlib.use('agg')
+# import matplotlib.pyplot as plt
+
+from mamlpytorch.tasks.sinusoid_tasks import SinusoidTaskDistribution
 from mamlpytorch.networks import SinusoidModel
-from mamlpytorch.metalearners.maml import MAMLMetaLearner
+
+def replace_grad(param_grad, param_name):
+	def replace_grad_(module):
+		return param_grad[param_name]
+
+	return replace_grad_
 
 
-def main():
+def main(cfg):
 
-	np.random.seed(args.seed)
-	torch.manual_seed(args.seed)
+	np.random.seed(1)
+	torch.manual_seed(1)
 
-	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+	writer = SummaryWriter()
 
-	if args.dataset == "sinusoid":
+	dataset = cfg.get('dataset', 'sinusoid')
 
-		metatrain_task_distribution, metatest_task_distribution = \
-							create_sinusoid_tasks(min_amplitude = 0.1, 
-													max_amplitude = 5.0,
-													min_phase = 0.0,
-													max_phase = 2 * np.pi,
-													min_x = -5.0,
-													max_x = 5.0,
-													num_training_samples = args.num_train_samples_per_class,
-													num_test_samples = args.num_test_samples_per_class,
-													num_test_tasks = 100,
-													meta_batch_size = args.meta_batch_size)
+	if dataset == "sinusoid":
 		
-		model = SinusoidModel().to(device)
-
-		inner_optimizer = optim.Adam(model.parameters(), lr = args.inner_lr)
+		model = SinusoidModel()
+		task_distribution = SinusoidTaskDistribution()
 		loss_function = nn.MSELoss()
-		metrics = []
+
+	meta_optimizer = optim.Adam(model.parameters(), lr = cfg['meta']['lr'])
+
+	# start = time.time()
 	
-	else:
-		print("ERROR: training task not recognized [", args.dataset, "]")
-		sys.exit()
+	for meta_iter in range(cfg['meta']['training_iterations']):
+		
+		'''
+		Step 3
+		'''
+		tasks = task_distribution.sample_batch(batch_size = cfg['meta']['batch_size'])
+		
+		meta_loss = 0.
+		meta_gradients = []
 
-	if args.metamodel == 'maml':
+		for i, task in enumerate(tasks):
+			
+			'''
+			Step 5
+			'''
+			x_support, y_support = task.sample_batch(batch_size = cfg['inner']['batch_size'])
+			
+			'''
+			Step 6
+			'''
+			task_adapted_weights = OrderedDict(model.named_parameters())
+			y_support_pred = model.functional_forward(x_support, fast_weights)
+			task_support_loss = loss_function(y_support_pred, y_support)
+			task_support_gradient = torch.autograd.grad(task_support_loss, task_adapted_weights.values())
 
-		meta_optimizer = optim.Adam(lr = args.meta_lr)
-		metalearner = MAMLMetaLearner()
+			'''
+			Step 7
+			'''
+			task_adapted_weights = OrderedDict(
+				(name, param - inner_lr * grad)
+				for ((name, param), grad) in zip(task_adapted_weights.items(), task_support_gradient))
 
-	metabatch_results = [] # Store loss from each task
-	for meta_iter in range(args.num_metatraining_iterations):
+			'''
+			Step 8
+			'''
+			x_query, y_query = task.sample_batch(batch_size = cfg['inner']['batch_size'])
+			
+			'''
+			Save gradients for each task
+			'''
+			y_query_pred = model.functional_forward(x_query, task_adapted_weights)
+			task_query_loss = loss_function(y_query_pred, y_query)
+			task_query_gradient = torch.autograd.grad(task_query_loss, task_adapted_weights.values(), create_graph = False)
+			
+			'''
+			Naming the gradients
+			'''
+			task_query_gradient = {name: g for ((name, _), g) in zip(task_adapted_weights.items(), task_query_gradient)}
+			
+			meta_gradients.append(task_query_gradient) 
 
-		# Sample a new set of tasks for every meta-iteration
-		# meta_batch should be a list of SinusoidTask objects
-		# Create 'batch_size' PyTorch dataset objects
-			# Initialize a dataloader for each dataset 
+			meta_loss += task_query_loss
+		
+		if (meta_iter + 1) % cfg['logs']['writer_interval'] == 0:
+			writer.add_scalar('Loss/QuerySet', meta_loss.item() / cfg['meta']['batch_size'], 
+				meta_iter)
+		
+		'''
+		Define a run ID and append to model path
+		'''
+		if (meta_iter + 1) % cfg['logs']['save_interval'] == 0:
+			torch.save(model.state_dict(), cfg['logs']['model_save_path'])
 
-		metatrain_tasks, metatest_tasks = create_sinusoid_tasks(min_amplitude = 0.1, 
-													max_amplitude = 5.0,
-													min_phase = 0.0,
-													max_phase = 2 * np.pi,
-													min_x = -5.0,
-													max_x = 5.0,
-													num_training_samples = args.num_train_samples_per_class,
-													num_test_samples = args.num_test_samples_per_class,
-													num_test_tasks = 100,
-													meta_batch_size = args.meta_batch_size)
+		'''
+		Step 10
+		'''
+		meta_gradient = {k: torch.stack([grad[k] for grad in meta_gradients]).mean(dim = 0) 
+								for k in meta_gradients[0].keys()}
 
-		metalearner.train()		
+		'''
+		Using hooks to replace the gradient of the meta-model parameters manually.
+		https://towardsdatascience.com/advances-in-few-shot-learning-reproducing-results-in-pytorch-aba70dee541d has a great
+		explanation regarding this.
+		'''
+		hooks = []
+		for name, param in model.named_parameters():
+			hooks.append(
+				param.register_hook(replace_grad(meta_gradient, name)))
 
-		for task in metatrain_tasks:
-			# print("Amplitude: {}, Phase: {}".format(task.X.shape, task.y.shape))
-			task.fit_n_iterations(model, inner_optimizer, loss_function, args.num_inner_training_iterations, \
-				args.inner_batch_size)
+		meta_optimizer.zero_grad()
+		
+		dummy_pred = model(torch.zeros(1, 1))
+		dummy_loss = loss_function(dummy_pred, torch.zeros(1, 1))
+		'''
+		Replacing gradient of every parameter in the meta-model using a backward hook
+		'''
+		dummy_loss.backward()
+		meta_optimizer.step()
 
-			# metabatch_results.append(metalearner.task_end(task))
+		for h in hooks:
+			h.remove()
 
-		if meta_iter % args.test_every_k_iterations == 0:
-			pass
-
-		if meta_iter % args.save_every_k_iterations == 0:
-			pass
-
-	# metalearner.update()
+	print(time.time() - start)		
 
 if __name__ == '__main__':
 	
-	parser = argparse.ArgumentParser()
-	
-	# Dataset and model options
-	parser.add_argument('--dataset', default = 'sinusoid')
-	parser.add_argument('--metamodel', default = 'maml')
-
-	parser.add_argument('--num_output_classes', default = 5, help = 'number of classes used in classification \
-		(e.g. 5-way classification).')
-	parser.add_argument('--num_train_samples_per_class', default = 5, help = 'number of samples per class used in \
-		classification (e.g. 5-shot classification).')
-	parser.add_argument('--num_test_samples_per_class', default = 15, help = 'number of samples per class used in \
-		testing (e.g., evaluating a model trained on k-shots, on a different set of samples).')
-	
-	# Meta-training options
-	parser.add_argument('--num_metatraining_iterations', default = 1000)
-	parser.add_argument('--meta_batch_size', default = 5, help = 'meta-batch size: number of tasks sampled at \
-		each meta-iteration.')
-	parser.add_argument('--meta_lr', default = 0.001, help = 'learning rate of the meta-optimizer')
-
-	# Inner-training options
-	parser.add_argument('--num_inner_training_iterations', default = 5, help = 'number of gradient descent steps \
-		to perform for each task in a meta-batch (inner steps).')
-	parser.add_argument('--inner_batch_size', default = -1, help = 'batch size: number of task-specific points \
-		sampled at each inner iteration. If <0, then it defaults to num_train_samples_per_class*num_output_classes.')
-	parser.add_argument('--inner_lr', default = 0.001, help = 'learning rate of the inner optimizer. \
-		Default 0.01 for FOMAML, 1.0 for Reptile')
-
-	# Logging, saving, and testing options
-	parser.add_argument('--save_every_k_iterations', default = 1000, help = 'the model is saved every k iterations.')
-	parser.add_argument('--test_every_k_iterations', default = 100, help = 'the performance of the model is evaluated every \
-		k iterations.')
-	parser.add_argument('--model_save_filename', default = 'saved/model.h5', help = 'path + filename where to save the \
-		model to.')
-
-	parser.add_argument('--seed', default = '100', type = int, help = 'random seed.')
+	parser = argparse.ArgumentParser(description = "config")
+	parser.add_argument('--config', 
+					nargs = '?', 
+					type = str, 
+					default = 'config.yml')
 
 	args = parser.parse_args()
 
-	main()
-	
+	with open(args.config) as f_in:
+		cfg = yaml.safe_load(f_in)
 
-
+	main(cfg)

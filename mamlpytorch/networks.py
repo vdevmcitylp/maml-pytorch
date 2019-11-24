@@ -23,6 +23,9 @@ class SinusoidModel(nn.Module):
 
 		return output
 
+	'''
+	This could have been defined anywhere, makes OOP-sense to put it here
+	'''
 	def functional_forward(self, x, weights):
 
 		x = F.linear(x, weights['hidden_1.weight'], weights['hidden_1.bias'])
@@ -31,7 +34,5 @@ class SinusoidModel(nn.Module):
 		output = F.linear(x, weights['output.weight'], weights['output.bias'])
 
 		return output
-
-	# def meta_update(self, meta_gradient):
 
 		
