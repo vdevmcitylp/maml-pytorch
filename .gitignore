@@ -1,4 +1,6 @@
 *.pyc
 test.py
 runs/
+tensorboard-runs/
 notebooks/
+todo.md

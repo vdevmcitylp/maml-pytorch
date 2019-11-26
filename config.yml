@@ -1,7 +1,7 @@
 
 dataset: sinusoid
 meta:
-  training_iterations: 100000
+  training_iterations: 50000
   batch_size: 25
   lr: 1.0e-3
 inner:
@@ -9,9 +9,8 @@ inner:
   training_iterations: 1
   lr: 1.0e-3
 logs:
-  val_interval: 100
+  test_interval: 100
   print_interval: 50
   save_interval: 1000
-  writer_interval: 50
-  model_save_path: models/
+  writer_interval: 1
 

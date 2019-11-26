@@ -1,9 +1,12 @@
 
+import os
 import time
 import pdb
 import copy
 import yaml
 import argparse
+import random
+import shutil
 
 from collections import OrderedDict
 
@@ -14,30 +17,21 @@ from torch.utils.tensorboard import SummaryWriter
 
 import numpy as np
 
-# import matplotlib
-# matplotlib.use('agg')
-# import matplotlib.pyplot as plt
-
 from mamlpytorch.tasks.sinusoid_tasks import SinusoidTaskDistribution
 from mamlpytorch.networks import SinusoidModel
-
-def replace_grad(param_grad, param_name):
-	def replace_grad_(module):
-		return param_grad[param_name]
-
-	return replace_grad_
+from mamlpytorch.metalearners.maml import MAMLMetaLearner
 
 
-def main(cfg):
+def main(cfg, run_id):
 
 	np.random.seed(1)
 	torch.manual_seed(1)
 
-	writer = SummaryWriter()
+	writer = SummaryWriter(log_dir = 'tensorboard-runs/{}/'.format(run_id))
 
 	dataset = cfg.get('dataset', 'sinusoid')
 
-	if dataset == "sinusoid":
+	if dataset == 'sinusoid':
 		
 		model = SinusoidModel()
 		task_distribution = SinusoidTaskDistribution()
@@ -46,100 +40,50 @@ def main(cfg):
 	meta_optimizer = optim.Adam(model.parameters(), lr = cfg['meta']['lr'])
 
 	# start = time.time()
+
+	meta_model = MAMLMetaLearner(model, 
+							task_distribution, 
+							meta_optimizer, 
+							cfg['meta']['batch_size'], 
+							cfg['inner']['lr'], 
+							cfg['inner']['batch_size'],
+							loss_function, 
+							order = 1)
 	
+	meta_test_task = meta_model.task_distribution.sample_batch(batch_size = 1)[0]
+	x_query, y_query = meta_test_task.sample_batch(batch_size = cfg['inner']['batch_size'])
+	x_support, y_support = meta_test_task.sample_batch(batch_size = cfg['inner']['batch_size'])
+
 	for meta_iter in range(cfg['meta']['training_iterations']):
 		
+		meta_train_loss = meta_model.train()
+
 		'''
-		Step 3
+		Meta-Testing
 		'''
-		tasks = task_distribution.sample_batch(batch_size = cfg['meta']['batch_size'])
-		
-		meta_loss = 0.
-		meta_gradients = []
+		if (meta_iter) % cfg['logs']['test_interval'] == 0:
+			meta_test_loss = meta_model.test(x_query, y_query, x_support, y_support)
+			# fine_tune_loss = fine_tune_model(task)
+			writer.add_scalar('Loss/MetaTest', meta_test_loss.item(), meta_iter)
 
-		for i, task in enumerate(tasks):
-			
-			'''
-			Step 5
-			'''
-			x_support, y_support = task.sample_batch(batch_size = cfg['inner']['batch_size'])
-			
-			'''
-			Step 6
-			'''
-			task_adapted_weights = OrderedDict(model.named_parameters())
-			y_support_pred = model.functional_forward(x_support, fast_weights)
-			task_support_loss = loss_function(y_support_pred, y_support)
-			task_support_gradient = torch.autograd.grad(task_support_loss, task_adapted_weights.values())
-
-			'''
-			Step 7
-			'''
-			task_adapted_weights = OrderedDict(
-				(name, param - inner_lr * grad)
-				for ((name, param), grad) in zip(task_adapted_weights.items(), task_support_gradient))
-
-			'''
-			Step 8
-			'''
-			x_query, y_query = task.sample_batch(batch_size = cfg['inner']['batch_size'])
-			
-			'''
-			Save gradients for each task
-			'''
-			y_query_pred = model.functional_forward(x_query, task_adapted_weights)
-			task_query_loss = loss_function(y_query_pred, y_query)
-			task_query_gradient = torch.autograd.grad(task_query_loss, task_adapted_weights.values(), create_graph = False)
-			
-			'''
-			Naming the gradients
-			'''
-			task_query_gradient = {name: g for ((name, _), g) in zip(task_adapted_weights.items(), task_query_gradient)}
-			
-			meta_gradients.append(task_query_gradient) 
-
-			meta_loss += task_query_loss
-		
+		'''
+		Logging Information
+		'''
 		if (meta_iter + 1) % cfg['logs']['writer_interval'] == 0:
-			writer.add_scalar('Loss/QuerySet', meta_loss.item() / cfg['meta']['batch_size'], 
+			writer.add_scalar('Loss/MetaTrain', meta_train_loss.item() / cfg['meta']['batch_size'], 
 				meta_iter)
 		
-		'''
-		Define a run ID and append to model path
-		'''
-		if (meta_iter + 1) % cfg['logs']['save_interval'] == 0:
-			torch.save(model.state_dict(), cfg['logs']['model_save_path'])
+		if meta_iter % cfg['logs']['save_interval'] == 0:
+			if meta_iter == 0:
+				best_meta_train_loss = meta_train_loss.item()
+				torch.save(model.state_dict(), 'runs/{}/model.pth'.format(run_id))
+				continue
+			
+			if meta_train_loss.item() < best_meta_train_loss:
+				best_meta_train_loss = meta_train_loss.item()
+				torch.save(model.state_dict(), 'runs/{}/model.pth'.format(run_id))
 
-		'''
-		Step 10
-		'''
-		meta_gradient = {k: torch.stack([grad[k] for grad in meta_gradients]).mean(dim = 0) 
-								for k in meta_gradients[0].keys()}
-
-		'''
-		Using hooks to replace the gradient of the meta-model parameters manually.
-		https://towardsdatascience.com/advances-in-few-shot-learning-reproducing-results-in-pytorch-aba70dee541d has a great
-		explanation regarding this.
-		'''
-		hooks = []
-		for name, param in model.named_parameters():
-			hooks.append(
-				param.register_hook(replace_grad(meta_gradient, name)))
-
-		meta_optimizer.zero_grad()
-		
-		dummy_pred = model(torch.zeros(1, 1))
-		dummy_loss = loss_function(dummy_pred, torch.zeros(1, 1))
-		'''
-		Replacing gradient of every parameter in the meta-model using a backward hook
-		'''
-		dummy_loss.backward()
-		meta_optimizer.step()
-
-		for h in hooks:
-			h.remove()
-
-	print(time.time() - start)		
+	# print(time.time() - start)
 
 if __name__ == '__main__':
 	
@@ -153,5 +97,13 @@ if __name__ == '__main__':
 
 	with open(args.config) as f_in:
 		cfg = yaml.safe_load(f_in)
+	
+	run_id = random.randint(1, 100000)
+	print('Run ID: {}'.format(run_id))
 
-	main(cfg)
+	if not os.path.exists('runs/{}'.format(run_id)):
+		os.makedirs('runs/{}'.format(run_id))
+
+	shutil.copy('config.yml', 'runs/{}/config.yml'.format(run_id))
+
+	main(cfg, run_id)
