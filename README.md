@@ -14,6 +14,7 @@ Code tested with pytorch version: 1.2.0+cpu and Python 3.5.
 
 ### Usage
 
+<<<<<<< HEAD
 	python main.py
 
 Hyperparameters can be set in config.yml.
@@ -21,3 +22,11 @@ Hyperparameters can be set in config.yml.
 To check tensorboard, open up a command prompt and enter,
 	
 	tensorboard --logdir=tensorboard-runs/<run_id>
+=======
+TODO:
+- [ ] Write meta-testing code
+- [ ] Adding meta-training code in maml.py
+- [ ] Write code for 2nd order MAML
+- [ ] Write usage instructions in README
+- [ ] Write a notebook for better explanation (Required?)
+>>>>>>> f4857dc1587578f6515d2333fe743b6a14e57b8f
