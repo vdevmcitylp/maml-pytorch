@@ -54,48 +54,6 @@ def main(cfg, run_id):
 	meta_test_task = meta_model.task_distribution.sample_batch(batch_size = 1)[0]
 	x_query, y_query = meta_test_task.sample_batch(batch_size = cfg['inner']['batch_size'])
 	x_support, y_support = meta_test_task.sample_batch(batch_size = cfg['inner']['batch_size'])
-=======
-		for i, task in enumerate(tasks):
-			
-			'''
-			Step 5
-			'''
-			x_support, y_support = task.sample_batch(batch_size = cfg['inner']['batch_size'])
-			
-			'''
-			Step 6
-			'''
-			task_adapted_weights = OrderedDict(model.named_parameters())
-			y_support_pred = model.functional_forward(x_support, task_adapted_weights)
-			task_support_loss = loss_function(y_support_pred, y_support)
-			task_support_gradient = torch.autograd.grad(task_support_loss, task_adapted_weights.values())
-
-			'''
-			Step 7
-			'''
-			task_adapted_weights = OrderedDict(
-				(name, param - inner_lr * grad)
-				for ((name, param), grad) in zip(task_adapted_weights.items(), task_support_gradient))
-
-			'''
-			Step 8
-			'''
-			x_query, y_query = task.sample_batch(batch_size = cfg['inner']['batch_size'])
-			
-			'''
-			Save gradients for each task
-			'''
-			y_query_pred = model.functional_forward(x_query, task_adapted_weights)
-			task_query_loss = loss_function(y_query_pred, y_query)
-			task_query_gradient = torch.autograd.grad(task_query_loss, task_adapted_weights.values(), create_graph = False)
-			
-			'''
-			Naming the gradients
-			'''
-			task_query_gradient = {name: g for ((name, _), g) in zip(task_adapted_weights.items(), task_query_gradient)}
-			
-			meta_gradients.append(task_query_gradient) 
->>>>>>> f4857dc1587578f6515d2333fe743b6a14e57b8f
 
 	for meta_iter in range(cfg['meta']['training_iterations']):
 		
@@ -149,8 +107,4 @@ if __name__ == '__main__':
 
 	shutil.copy('config.yml', 'runs/{}/config.yml'.format(run_id))
 
-<<<<<<< HEAD
 	main(cfg, run_id)
-=======
-	main(cfg)
->>>>>>> f4857dc1587578f6515d2333fe743b6a14e57b8f
