@@ -41,7 +41,6 @@ def main(cfg, run_id):
 
 	# start = time.time()
 
-<<<<<<< HEAD
 	meta_model = MAMLMetaLearner(model, 
 							task_distribution, 
 							meta_optimizer, 
