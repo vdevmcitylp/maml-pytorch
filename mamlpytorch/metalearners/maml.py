@@ -154,7 +154,7 @@ class MAMLMetaLearner:
 	def test(self, x_query, y_query, x_support, y_support):
 		'''
 		Perform meta-testing
-		See the effectiveness of the meta-learning procedure by perform k-shot testing on a new task
+		See the effectiveness of the meta-learning procedure by performing k-shot testing on a new task
 		'''
 
 		task_adapted_weights, task_support_gradient = self.inner_train(x_support, y_support)
