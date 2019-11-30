@@ -1,4 +1,6 @@
-
+'''
+Step numbers correspond to the algorithm for supervised learning in the paper (https://arxiv.org/abs/1703.03400)
+'''
 
 import torch
 
