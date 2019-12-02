@@ -46,6 +46,7 @@ def main(cfg, run_id):
 							meta_optimizer, 
 							cfg['meta']['batch_size'], 
 							cfg['inner']['lr'], 
+							cfg['inner']['training_iterations'], 
 							cfg['inner']['batch_size'],
 							loss_function, 
 							order = 1)

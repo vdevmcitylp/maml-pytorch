@@ -15,6 +15,7 @@ class MAMLMetaLearner:
 			meta_optimizer,
 			meta_batch_size,
 			inner_lr,
+			inner_training_iterations,
 			inner_batch_size,
 			loss_function,
 			order):
@@ -26,6 +27,7 @@ class MAMLMetaLearner:
 		self.task_distribution = task_distribution
 		self.inner_batch_size = inner_batch_size
 		self.inner_lr = inner_lr
+		self.inner_training_iterations = inner_training_iterations
 		self.model = model
 		self.loss_function = loss_function
 		self.order = order # 1 or 2
@@ -48,9 +50,7 @@ class MAMLMetaLearner:
 			'''
 			x_support, y_support = task.sample_batch(batch_size = self.inner_batch_size)
 
-			task_adapted_weights, task_support_gradient = self.inner_train(x_support, y_support)
-			
-			task_adapted_weights = self.inner_update(task_adapted_weights, task_support_gradient)
+			task_adapted_weights = self.inner_train(x_support, y_support)
 			
 			'''
 			Step 8
@@ -74,13 +74,18 @@ class MAMLMetaLearner:
 		Step 6
 		'''
 		task_adapted_weights = OrderedDict(self.model.named_parameters())
-		y_support_pred = self.model.functional_forward(x_support, task_adapted_weights)
-		task_support_loss = self.loss_function(y_support_pred, y_support)
-		task_support_gradient = torch.autograd.grad(task_support_loss, task_adapted_weights.values())
+		
+		for inner_iter in range(self.inner_training_iterations):
 
-		return task_adapted_weights, task_support_gradient
+			y_support_pred = self.model.functional_forward(x_support, task_adapted_weights)
+			task_support_loss = self.loss_function(y_support_pred, y_support)
+			task_support_gradient = torch.autograd.grad(task_support_loss, task_adapted_weights.values())
 
-	def inner_update(self, task_adapted_weights, task_support_gradient):
+			task_adapted_weights = self._inner_update(task_adapted_weights, task_support_gradient)
+
+		return task_adapted_weights
+
+	def _inner_update(self, task_adapted_weights, task_support_gradient):
 		'''
 		Step 7
 		'''
@@ -157,8 +162,7 @@ class MAMLMetaLearner:
 		See the effectiveness of the meta-learning procedure by performing k-shot testing on a new task
 		'''
 
-		task_adapted_weights, task_support_gradient = self.inner_train(x_support, y_support)
-		task_adapted_weights = self.inner_update(task_adapted_weights, task_support_gradient)
+		task_adapted_weights = self.inner_train(x_support, y_support)
 				
 		_, task_query_loss = self.get_query_gradient_loss(x_query, y_query, task_adapted_weights)
 

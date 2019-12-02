@@ -6,7 +6,7 @@ meta:
   lr: 1.0e-3
 inner:
   batch_size: 10
-  training_iterations: 1
+  training_iterations: 4
   lr: 1.0e-3
 logs:
   test_interval: 100
