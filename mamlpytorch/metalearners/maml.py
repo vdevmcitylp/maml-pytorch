@@ -48,14 +48,14 @@ class MAMLMetaLearner:
 			'''
 			Step 5
 			'''
-			x_support, y_support = task.sample_batch(batch_size = self.inner_batch_size)
+			x_support, y_support = task['train']
 
 			task_adapted_weights = self.inner_train(x_support, y_support)
 			
 			'''
 			Step 8
 			'''
-			x_query, y_query = task.sample_batch(batch_size = self.inner_batch_size)
+			x_query, y_query = task['test']
 			
 			task_query_gradient, task_query_loss = self.get_query_gradient_loss(x_query, y_query, \
 																				task_adapted_weights)
@@ -63,8 +63,14 @@ class MAMLMetaLearner:
 			task_query_gradients.append(task_query_gradient)
 			meta_loss += task_query_loss
 	
+			'''
+			Step 10.1: Calculating meta-gradient
+			'''
 			meta_gradient = self.get_meta_gradient(task_query_gradients)
 
+			'''
+			Step 10.2: Updating the model weights
+			'''
 			self.update(meta_gradient, meta_loss)
 
 		return meta_loss
@@ -77,7 +83,7 @@ class MAMLMetaLearner:
 		
 		for inner_iter in range(self.inner_training_iterations):
 
-			y_support_pred = self.model.functional_forward(x_support, task_adapted_weights)
+			y_support_pred = self.model.functional_forward(x_support, weights = task_adapted_weights)
 			task_support_loss = self.loss_function(y_support_pred, y_support)
 			task_support_gradient = torch.autograd.grad(task_support_loss, task_adapted_weights.values())
 
@@ -112,19 +118,12 @@ class MAMLMetaLearner:
 
 	def get_meta_gradient(self, task_query_gradients):
 		
-		'''
-		Step 10.1: Calculating meta-gradient
-		'''
 		meta_gradient = {k: torch.stack([grad[k] for grad in task_query_gradients]).mean(dim = 0) 
 								for k in task_query_gradients[0].keys()}
 
 		return meta_gradient
 
 	def update(self, meta_gradient, meta_loss):
-
-		'''
-		Step 10.2: Updating the model weights
-		'''
 
 		def replace_grad(param_grad, param_name):
 			def replace_grad_(module):

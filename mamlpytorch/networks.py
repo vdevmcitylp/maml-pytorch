@@ -3,6 +3,26 @@
 import torch.nn as nn
 import torch.nn.functional as F
 
+
+class OmniglotCNNModel(nn.Module):
+
+	def __init__(self):
+		
+		super(OmniglotCNNModel, self).__init()
+
+		
+
+	def forward(self, x, weights = None):
+		pass
+
+
+
+
+
+
+
+
+
 class SinusoidModel(nn.Module):
 
 	def __init__(self):
@@ -23,14 +43,11 @@ class SinusoidModel(nn.Module):
 
 		return output
 
-	'''
-	This could have been defined anywhere, makes OOP-sense to put it here
-	'''
 	def functional_forward(self, x, weights):
 
 		x = F.linear(x, weights['hidden_1.weight'], weights['hidden_1.bias'])
 		x = F.relu(x)
-		# x = F.linear(x, weights[2], weights[3])
+		# x = F.linear(x, weights[hidden_2.weight], weights[hidden_2.bias])
 		output = F.linear(x, weights['output.weight'], weights['output.bias'])
 
 		return output

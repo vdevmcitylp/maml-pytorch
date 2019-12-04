@@ -18,7 +18,10 @@ from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 
 from mamlpytorch.tasks.sinusoid_tasks import SinusoidTaskDistribution
-from mamlpytorch.networks import SinusoidModel
+from mamlpytorch.tasks.omniglot_tasks import OmniglotTaskDistribution
+
+from mamlpytorch.networks import SinusoidModel, OmniglotCNNModel
+
 from mamlpytorch.metalearners.maml import MAMLMetaLearner
 
 
@@ -37,6 +40,12 @@ def main(cfg, run_id):
 		task_distribution = SinusoidTaskDistribution()
 		loss_function = nn.MSELoss()
 
+	elif dataset == 'omniglot':
+
+		model = OmniglotCNNModel()
+		task_distribution = OmniglotTaskDistribution()
+		loss_function = nn.CrossEntropyLoss()
+
 	meta_optimizer = optim.Adam(model.parameters(), lr = cfg['meta']['lr'])
 
 	# start = time.time()
@@ -51,9 +60,9 @@ def main(cfg, run_id):
 							loss_function, 
 							order = 1)
 	
-	meta_test_task = meta_model.task_distribution.sample_batch(batch_size = 1)[0]
-	x_query, y_query = meta_test_task.sample_batch(batch_size = cfg['inner']['batch_size'])
-	x_support, y_support = meta_test_task.sample_batch(batch_size = cfg['inner']['batch_size'])
+	# meta_test_task = meta_model.task_distribution.sample_batch(batch_size = 1)[0]
+	# x_query, y_query = meta_test_task.sample_batch(batch_size = cfg['inner']['batch_size'])
+	# x_support, y_support = meta_test_task.sample_batch(batch_size = cfg['inner']['batch_size'])
 
 	for meta_iter in range(cfg['meta']['training_iterations']):
 		
