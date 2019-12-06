@@ -7,7 +7,7 @@ class OmniglotTaskDistribution:
 	def __init__(self, 
 				num_ways,
 				num_shots,
-				num_test_shots,
+				num_test_shots = 3,
 				meta_train = True):
 		
 		self.num_ways = num_ways
@@ -25,4 +25,4 @@ class OmniglotTaskDistribution:
 	def sample_batch(self, batch_size):
 
 		dataloader = BatchMetaDataLoader(self.dataset, batch_size = batch_size, num_workers = 4)
-		return dataloader
+		return iter(dataloader).next()

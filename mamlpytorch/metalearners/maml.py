@@ -6,6 +6,7 @@ import torch
 
 from collections import OrderedDict
 
+import pdb
 
 class MAMLMetaLearner:
 	
@@ -39,24 +40,19 @@ class MAMLMetaLearner:
 		Step 3: Sample tasks from distribution
 		'''
 		tasks = self.task_distribution.sample_batch(batch_size = self.meta_batch_size)
-		
+
 		meta_loss = 0.
 		task_query_gradients = []
 		
-		for i, task in enumerate(tasks):
+		# pdb.set_trace()
+		x_support_batch, y_support_batch = tasks['train']
+		x_query_batch, y_query_batch = tasks['test']
 
-			'''
-			Step 5
-			'''
-			x_support, y_support = task['train']
+		for x_support, y_support, x_query, y_query in zip(x_support_batch, y_support_batch, 
+															x_query_batch, y_query_batch):
 
 			task_adapted_weights = self.inner_train(x_support, y_support)
-			
-			'''
-			Step 8
-			'''
-			x_query, y_query = task['test']
-			
+				
 			task_query_gradient, task_query_loss = self.get_query_gradient_loss(x_query, y_query, \
 																				task_adapted_weights)
 	
@@ -143,8 +139,8 @@ class MAMLMetaLearner:
 
 			self.meta_optimizer.zero_grad()
 	
-			dummy_pred = self.model(torch.zeros(1, 1))
-			dummy_loss = self.loss_function(dummy_pred, torch.zeros(1, 1))
+			dummy_pred = self.model(torch.zeros(1, 1, 28, 28)) # TD: Define according to dataset
+			dummy_loss = self.loss_function(dummy_pred, torch.LongTensor([1]))
 			
 			'''
 			Replacing gradient of every parameter in the meta-model using a backward hook

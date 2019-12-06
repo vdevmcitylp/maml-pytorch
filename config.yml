@@ -1,13 +1,13 @@
 
-dataset: sinusoid
+dataset: omniglot
 meta:
   training_iterations: 50000
-  batch_size: 25
+  batch_size: 16
   lr: 1.0e-3
 inner:
-  batch_size: 10
-  training_iterations: 4
-  lr: 1.0e-3
+  batch_size: 1
+  training_iterations: 1
+  lr: 0.4
 logs:
   test_interval: 100
   print_interval: 50

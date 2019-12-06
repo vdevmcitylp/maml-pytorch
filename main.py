@@ -42,8 +42,8 @@ def main(cfg, run_id):
 
 	elif dataset == 'omniglot':
 
-		model = OmniglotCNNModel()
-		task_distribution = OmniglotTaskDistribution()
+		model = OmniglotCNNModel(num_ways = 5)
+		task_distribution = OmniglotTaskDistribution(num_ways = 5, num_shots = 1)
 		loss_function = nn.CrossEntropyLoss()
 
 	meta_optimizer = optim.Adam(model.parameters(), lr = cfg['meta']['lr'])
@@ -71,10 +71,10 @@ def main(cfg, run_id):
 		'''
 		Meta-Testing
 		'''
-		if (meta_iter) % cfg['logs']['test_interval'] == 0:
-			meta_test_loss = meta_model.test(x_query, y_query, x_support, y_support)
-			# fine_tune_loss = fine_tune_model(task)
-			writer.add_scalar('Loss/MetaTest', meta_test_loss.item(), meta_iter)
+		# if (meta_iter) % cfg['logs']['test_interval'] == 0:
+		# 	meta_test_loss = meta_model.test(x_query, y_query, x_support, y_support)
+		# 	# fine_tune_loss = fine_tune_model(task)
+		# 	writer.add_scalar('Loss/MetaTest', meta_test_loss.item(), meta_iter)
 
 		'''
 		Logging Information
