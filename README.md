@@ -2,11 +2,13 @@
 
 This repository is an implementation of [Model Agnostic Meta-Learning](https://arxiv.org/abs/1703.03400) by Finn et al. in PyTorch.
 
-Currently, the code supports first-order MAML & Sinusoid Regression.
+Currently, the code supports first-order MAML & the [Omniglot](http://www.sciencemag.org/content/350/6266/1332.short) dataset.
 
 ### Requirements
 
-Code tested with pytorch version: 1.2.0+cpu and Python 3.5.
+- Python 3.5.2
+- Pytorch 1.3.1
+- Torchmeta 1.2.1
 
 ### Acknowledgments
 
