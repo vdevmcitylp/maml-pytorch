@@ -1,7 +1,7 @@
 
 dataset: omniglot
 meta:
-  training_iterations: 50000
+  training_iterations: 10000
   batch_size: 16
   lr: 1.0e-3
 inner:

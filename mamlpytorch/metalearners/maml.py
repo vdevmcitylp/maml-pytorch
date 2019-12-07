@@ -3,6 +3,7 @@ Step numbers correspond to the algorithm for supervised learning in the paper (h
 '''
 
 import torch
+import torch.nn.functional as F
 
 from collections import OrderedDict
 
@@ -53,7 +54,7 @@ class MAMLMetaLearner:
 
 			task_adapted_weights = self.inner_train(x_support, y_support)
 				
-			task_query_gradient, task_query_loss = self.get_query_gradient_loss(x_query, y_query, \
+			task_query_gradient, task_query_loss, _ = self.get_query_gradient_loss(x_query, y_query, \
 																				task_adapted_weights)
 	
 			task_query_gradients.append(task_query_gradient)
@@ -101,8 +102,8 @@ class MAMLMetaLearner:
 		'''
 		Save gradients for each task
 		'''
-		y_query_pred = self.model.functional_forward(x_query, task_adapted_weights)
-		task_query_loss = self.loss_function(y_query_pred, y_query)
+		y_query_logit = self.model.functional_forward(x_query, task_adapted_weights)
+		task_query_loss = self.loss_function(y_query_logit, y_query)
 		task_query_gradient = torch.autograd.grad(task_query_loss, task_adapted_weights.values(), create_graph = False)
 			
 		'''
@@ -110,7 +111,7 @@ class MAMLMetaLearner:
 		'''
 		task_query_gradient = {name: g for ((name, _), g) in zip(task_adapted_weights.items(), task_query_gradient)}
 		
-		return task_query_gradient, task_query_loss
+		return task_query_gradient, task_query_loss, y_query_logit
 
 	def get_meta_gradient(self, task_query_gradients):
 		
@@ -157,8 +158,14 @@ class MAMLMetaLearner:
 		See the effectiveness of the meta-learning procedure by performing k-shot testing on a new task
 		'''
 
+		# pdb.set_trace()
 		task_adapted_weights = self.inner_train(x_support, y_support)
 				
-		_, task_query_loss = self.get_query_gradient_loss(x_query, y_query, task_adapted_weights)
+		_, task_query_loss, y_query_logit = self.get_query_gradient_loss(x_query, y_query, task_adapted_weights)
 
-		return task_query_loss
+		with torch.no_grad():
+			y_query_pred = F.softmax(y_query_logit, dim = 1).argmax(dim = 1)
+			correct = torch.eq(y_query_pred, y_query).sum().item()
+			task_test_accuracy = correct / len(y_query)
+
+		return task_query_loss, task_test_accuracy
