@@ -18,7 +18,10 @@ from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 
 from mamlpytorch.tasks.sinusoid_tasks import SinusoidTaskDistribution
-from mamlpytorch.networks import SinusoidModel
+from mamlpytorch.tasks.omniglot_tasks import OmniglotTaskDistribution
+
+from mamlpytorch.networks import SinusoidModel, OmniglotCNNModel
+
 from mamlpytorch.metalearners.maml import MAMLMetaLearner
 
 
@@ -37,6 +40,12 @@ def main(cfg, run_id):
 		task_distribution = SinusoidTaskDistribution()
 		loss_function = nn.MSELoss()
 
+	elif dataset == 'omniglot':
+
+		model = OmniglotCNNModel(num_ways = 5)
+		task_distribution = OmniglotTaskDistribution(num_ways = 5, num_shots = 1)
+		loss_function = nn.CrossEntropyLoss()
+
 	meta_optimizer = optim.Adam(model.parameters(), lr = cfg['meta']['lr'])
 
 	# start = time.time()
@@ -51,9 +60,16 @@ def main(cfg, run_id):
 							loss_function, 
 							order = 1)
 	
-	meta_test_task = meta_model.task_distribution.sample_batch(batch_size = 1)[0]
-	x_query, y_query = meta_test_task.sample_batch(batch_size = cfg['inner']['batch_size'])
-	x_support, y_support = meta_test_task.sample_batch(batch_size = cfg['inner']['batch_size'])
+	# Wrap in a function, decide where to place
+	meta_test_task = task_distribution.sample_batch(batch_size = 1)
+	x_support, y_support = meta_test_task['train']
+	x_query, y_query = meta_test_task['test']
+
+	x_support = torch.squeeze(x_support, 0)
+	y_support = torch.squeeze(y_support)
+
+	x_query = torch.squeeze(x_query, 0)
+	y_query = torch.squeeze(y_query)
 
 	for meta_iter in range(cfg['meta']['training_iterations']):
 		
@@ -63,9 +79,10 @@ def main(cfg, run_id):
 		Meta-Testing
 		'''
 		if (meta_iter) % cfg['logs']['test_interval'] == 0:
-			meta_test_loss = meta_model.test(x_query, y_query, x_support, y_support)
+			meta_test_loss, meta_test_accuracy = meta_model.test(x_query, y_query, x_support, y_support) 
 			# fine_tune_loss = fine_tune_model(task)
 			writer.add_scalar('Loss/MetaTest', meta_test_loss.item(), meta_iter)
+			writer.add_scalar('Accuracy/MetaTest', meta_test_accuracy, meta_iter)
 
 		'''
 		Logging Information
