@@ -18,11 +18,31 @@ Currently, the code supports first-order MAML (FOMAML) & the [Omniglot](http://w
 
 ### Usage
 
+#### Setup hyperparameters in config.yml.
+
+```yaml
+dataset: omniglot
+num_ways: 5
+num_shots: 1
+meta:
+  training_iterations: 10000
+  batch_size: 16
+  lr: 1.0e-3
+inner:
+  batch_size: 1
+  training_iterations: 1
+  lr: 0.4
+logs:
+  val_interval: 100
+  writer_interval: 100
+device: 'cpu'               # or 'gpu'
+```
+
+#### Run main.py.
+	
 	python main.py
 
-Hyperparameters can be set in config.yml.
-
-[RECOMMENDED]
+#### [RECOMMENDED]
 To check tensorboard, open up a command prompt and enter,
 	
 	tensorboard --logdir=tensorboard-runs/
