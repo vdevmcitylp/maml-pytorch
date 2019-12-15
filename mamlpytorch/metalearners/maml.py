@@ -40,12 +40,12 @@ class MAMLMetaLearner:
 		self.device = device
 
 
-	def train(self, metatrain_task_distribution):
+	def train(self, meta_train_task_distribution):
 
 		'''
 		Step 3: Sample tasks from distribution
 		'''
-		tasks = metatrain_task_distribution.sample_batch(batch_size = self.meta_batch_size)
+		tasks = meta_train_task_distribution.sample_batch(batch_size = self.meta_batch_size)
 
 		meta_loss = 0.
 		task_query_gradients = []
@@ -159,14 +159,13 @@ class MAMLMetaLearner:
 			for h in hooks:
 				h.remove()
 
-	def validate(self, metaval_task_distribution):
+	def validate(self, meta_val_task_distribution):
 		'''
 		Perform meta-validation
 		Note: The same set of images are not being used each time for validation
 		The set of classes are the same though
 		'''
-
-		val_tasks = metaval_task_distribution.sample_batch(batch_size = self.meta_batch_size)
+		val_tasks = meta_val_task_distribution.sample_batch(batch_size = self.meta_batch_size)
 
 		x_support_batch, y_support_batch = val_tasks['train']
 		x_query_batch, y_query_batch = val_tasks['test']
@@ -196,3 +195,38 @@ class MAMLMetaLearner:
 		meta_val_accuracy = correct_predictions / total_predictions
 		
 		return meta_val_loss, meta_val_accuracy
+
+	def test(self, best_model, meta_test_task_distribution):
+
+		best_model.eval()
+
+		test_tasks = meta_test_task_distribution.sample_batch(batch_size = self.meta_batch_size)
+
+		x_support_batch, y_support_batch = test_tasks['train']
+		x_query_batch, y_query_batch = test_tasks['test']
+
+		correct_predictions = 0
+		total_predictions = 0 
+		meta_test_loss = 0.
+
+		for x_support, y_support, x_query, y_query in zip(x_support_batch, y_support_batch, 
+															x_query_batch, y_query_batch):
+
+			x_support, y_support = x_support.to(self.device), y_support.to(self.device)
+			x_query, y_query = x_query.to(self.device), y_query.to(self.device)
+
+			task_adapted_weights = self.inner_train(x_support, y_support)
+				
+			_, task_query_loss, y_query_logit = self.get_query_gradient_loss(x_query, y_query, \
+																				task_adapted_weights)
+
+			meta_test_loss += task_query_loss
+
+			with torch.no_grad():
+				y_query_pred = F.softmax(y_query_logit, dim = 1).argmax(dim = 1)
+				correct_predictions += torch.eq(y_query_pred, y_query).sum().item()
+				total_predictions += len(y_query)
+
+		meta_test_accuracy = correct_predictions / total_predictions
+		
+		return meta_test_accuracy

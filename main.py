@@ -54,10 +54,19 @@ def main(cfg, run_id):
 	elif dataset == 'omniglot':
 
 		model = OmniglotCNNModel(num_ways = cfg['num_ways'])
-		metatrain_task_distribution = OmniglotTaskDistribution(num_ways = cfg['num_ways'], num_shots = cfg['num_shots'], \
-																meta_split = 'train')
-		metaval_task_distribution = OmniglotTaskDistribution(num_ways = cfg['num_ways'], num_shots = cfg['num_shots'], \
-																meta_split = 'val')
+		meta_train_task_distribution = OmniglotTaskDistribution(
+												num_ways = cfg['num_ways'], 
+												num_shots = cfg['num_shots'],
+												meta_split = 'train')
+		meta_val_task_distribution = OmniglotTaskDistribution(
+												num_ways = cfg['num_ways'], 
+												num_shots = cfg['num_shots'],
+												meta_split = 'val')
+		meta_test_task_distribution = OmniglotTaskDistribution(
+												num_ways = cfg['num_ways'], 
+												num_shots = cfg['num_shots'],
+												meta_split = 'test')
+
 		loss_function = nn.CrossEntropyLoss()
 
 	LOGGER.info('Using {} dataset'.format(dataset))
@@ -74,37 +83,43 @@ def main(cfg, run_id):
 							device,
 							order = 1)
 
+	best_meta_val_accuracy = -10.0
 
 	for meta_iter in range(cfg['meta']['training_iterations']):
 		
-		meta_train_loss = meta_model.train(metatrain_task_distribution)
+		meta_train_loss = meta_model.train(meta_train_task_distribution)
+
+		if (meta_iter + 1) % cfg['logs']['writer_interval'] == 0:
+			writer.add_scalar('Loss/MetaTrain', meta_train_loss.item() / cfg['meta']['batch_size'], 
+				meta_iter)
 
 		'''
 		Meta-Validation
 		'''
 		if (meta_iter) % cfg['logs']['val_interval'] == 0:
+			
 			LOGGER.info('Performing meta-validation at meta-iteration: {}'.format(meta_iter))
-			meta_val_loss, meta_val_accuracy = meta_model.validate(metaval_task_distribution)
+			
+			meta_val_loss, meta_val_accuracy = meta_model.validate(meta_val_task_distribution)
+			
 			writer.add_scalar('Loss/MetaVal', meta_val_loss.item(), meta_iter)
 			writer.add_scalar('Accuracy/MetaVal', meta_val_accuracy, meta_iter)
 
-		'''
-		Logging Information
-		'''
-		if (meta_iter + 1) % cfg['logs']['writer_interval'] == 0:
-			writer.add_scalar('Loss/MetaTrain', meta_train_loss.item() / cfg['meta']['batch_size'], 
-				meta_iter)
-		
-		if meta_iter % cfg['logs']['save_interval'] == 0:
-			if meta_iter == 0:
-				best_meta_train_loss = meta_train_loss.item()
-				torch.save(model.state_dict(), 'runs/{}/model.pth'.format(run_id))
-				continue
-			
-			if meta_train_loss.item() < best_meta_train_loss:
-				LOGGER.info('Saving a better model at meta-iteration: {}'.format(meta_iter))
-				best_meta_train_loss = meta_train_loss.item()
-				torch.save(model.state_dict(), 'runs/{}/model.pth'.format(run_id))
+			if meta_val_accuracy > best_meta_val_accuracy:
+				best_meta_val_accuracy = meta_val_accuracy
+				torch.save(model.state_dict(), 'runs/{}/best_model.pth'.format(run_id))
+
+	'''
+	Meta-Testing
+	'''
+	LOGGER.info('Performing meta-testing.')
+
+	best_model = OmniglotCNNModel(num_ways = cfg['num_ways'])
+	best_model.load_state_dict(torch.load('runs/{}/best_model.pth'.format(run_id)))
+	meta_test_accuracy = meta_model.test(best_model, meta_test_task_distribution)
+
+	LOGGER.info('Meta-test Accuracy: {}'.format(meta_test_accuracy))
+
 
 if __name__ == '__main__':
 	
