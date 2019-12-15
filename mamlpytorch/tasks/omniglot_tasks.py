@@ -7,20 +7,20 @@ class OmniglotTaskDistribution:
 	def __init__(self, 
 				num_ways,
 				num_shots,
-				num_test_shots = 3,
-				meta_train = True):
+				meta_split,
+				num_test_shots = 3):
 		
 		self.num_ways = num_ways
 		self.num_shots = num_shots
 		self.num_test_shots = num_test_shots
-		self.meta_train = True
+		self.meta_split = meta_split
 
 		self.dataset = omniglot('data', 
 								ways = self.num_ways, 
 								shots = self.num_shots, 
 								test_shots = self.num_test_shots, 
-								meta_train = self.meta_train, 
-								download = False)
+								meta_split = self.meta_split, 
+								download = True)
 
 	def sample_batch(self, batch_size):
 

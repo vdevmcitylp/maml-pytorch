@@ -2,6 +2,8 @@
 Step numbers correspond to the algorithm for supervised learning in the paper (https://arxiv.org/abs/1703.03400)
 '''
 
+import logging
+
 import torch
 import torch.nn.functional as F
 
@@ -9,48 +11,53 @@ from collections import OrderedDict
 
 import pdb
 
+LOGGER = logging.getLogger(__name__)
+
+
 class MAMLMetaLearner:
 	
 	def __init__(self,
-			model,
-			task_distribution,
+			model, 
 			meta_optimizer,
 			meta_batch_size,
 			inner_lr,
 			inner_training_iterations,
 			inner_batch_size,
 			loss_function,
-			order):
+			device = 'cpu',
+			order = 1):
 		
-		print('MAML meta-learner initialized!')
+		LOGGER.info('MAML meta-learner initialized!')
 
 		self.meta_optimizer = meta_optimizer
 		self.meta_batch_size = meta_batch_size
-		self.task_distribution = task_distribution
 		self.inner_batch_size = inner_batch_size
 		self.inner_lr = inner_lr
 		self.inner_training_iterations = inner_training_iterations
-		self.model = model
+		self.model = model.to(device)
 		self.loss_function = loss_function
-		self.order = order # 1 or 2
+		self.order = order # 1
+		self.device = device
 
 
-	def train(self):
+	def train(self, metatrain_task_distribution):
 
 		'''
 		Step 3: Sample tasks from distribution
 		'''
-		tasks = self.task_distribution.sample_batch(batch_size = self.meta_batch_size)
+		tasks = metatrain_task_distribution.sample_batch(batch_size = self.meta_batch_size)
 
 		meta_loss = 0.
 		task_query_gradients = []
 		
-		# pdb.set_trace()
 		x_support_batch, y_support_batch = tasks['train']
 		x_query_batch, y_query_batch = tasks['test']
 
 		for x_support, y_support, x_query, y_query in zip(x_support_batch, y_support_batch, 
 															x_query_batch, y_query_batch):
+
+			x_support, y_support = x_support.to(self.device), y_support.to(self.device)
+			x_query, y_query = x_query.to(self.device), y_query.to(self.device)
 
 			task_adapted_weights = self.inner_train(x_support, y_support)
 				
@@ -152,20 +159,40 @@ class MAMLMetaLearner:
 			for h in hooks:
 				h.remove()
 
-	def test(self, x_query, y_query, x_support, y_support):
+	def validate(self, metaval_task_distribution):
 		'''
-		Perform meta-testing
-		See the effectiveness of the meta-learning procedure by performing k-shot testing on a new task
+		Perform meta-validation
+		Note: The same set of images are not being used each time for validation
+		The set of classes are the same though
 		'''
 
-		# pdb.set_trace()
-		task_adapted_weights = self.inner_train(x_support, y_support)
+		val_tasks = metaval_task_distribution.sample_batch(batch_size = self.meta_batch_size)
+
+		x_support_batch, y_support_batch = val_tasks['train']
+		x_query_batch, y_query_batch = val_tasks['test']
+
+		correct_predictions = 0
+		total_predictions = 0 
+		meta_val_loss = 0.
+
+		for x_support, y_support, x_query, y_query in zip(x_support_batch, y_support_batch, 
+															x_query_batch, y_query_batch):
+
+			x_support, y_support = x_support.to(self.device), y_support.to(self.device)
+			x_query, y_query = x_query.to(self.device), y_query.to(self.device)
+
+			task_adapted_weights = self.inner_train(x_support, y_support)
 				
-		_, task_query_loss, y_query_logit = self.get_query_gradient_loss(x_query, y_query, task_adapted_weights)
+			_, task_query_loss, y_query_logit = self.get_query_gradient_loss(x_query, y_query, \
+																				task_adapted_weights)
 
-		with torch.no_grad():
-			y_query_pred = F.softmax(y_query_logit, dim = 1).argmax(dim = 1)
-			correct = torch.eq(y_query_pred, y_query).sum().item()
-			task_test_accuracy = correct / len(y_query)
+			meta_val_loss += task_query_loss
 
-		return task_query_loss, task_test_accuracy
+			with torch.no_grad():
+				y_query_pred = F.softmax(y_query_logit, dim = 1).argmax(dim = 1)
+				correct_predictions += torch.eq(y_query_pred, y_query).sum().item()
+				total_predictions += len(y_query)
+
+		meta_val_accuracy = correct_predictions / total_predictions
+		
+		return meta_val_loss, meta_val_accuracy

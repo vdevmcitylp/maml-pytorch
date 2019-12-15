@@ -1,5 +1,7 @@
 
 dataset: omniglot
+num_ways: 5
+num_shots: 1
 meta:
   training_iterations: 10000
   batch_size: 16
@@ -9,8 +11,8 @@ inner:
   training_iterations: 1
   lr: 0.4
 logs:
-  test_interval: 100
-  print_interval: 50
+  val_interval: 100
   save_interval: 1000
+  logging_interval: 100
   writer_interval: 1
-
+device: 'cpu'

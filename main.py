@@ -7,6 +7,7 @@ import yaml
 import argparse
 import random
 import shutil
+import logging
 
 from collections import OrderedDict
 
@@ -25,64 +26,67 @@ from mamlpytorch.networks import SinusoidModel, OmniglotCNNModel
 from mamlpytorch.metalearners.maml import MAMLMetaLearner
 
 
+logging.getLogger("matplotlib").setLevel(logging.WARNING)
+LOGGER = logging.getLogger(__name__)
+
+def init_logging():
+    logging.basicConfig(format = '[%(asctime)s] [%(levelname)s] [%(name)s]  %(message)s',
+                        level = logging.DEBUG)
+
 def main(cfg, run_id):
 
 	np.random.seed(1)
 	torch.manual_seed(1)
+	
+	device = torch.device(cfg['device'] if torch.cuda.is_available() else 'cpu')
+	LOGGER.info('Training on {}.'.format(cfg['device']))
 
 	writer = SummaryWriter(log_dir = 'tensorboard-runs/{}/'.format(run_id))
 
 	dataset = cfg.get('dataset', 'sinusoid')
 
 	if dataset == 'sinusoid':
-		
-		model = SinusoidModel()
-		task_distribution = SinusoidTaskDistribution()
-		loss_function = nn.MSELoss()
+		raise NotImplementedError
+		# model = SinusoidModel()
+		# task_distribution = SinusoidTaskDistribution()
+		# loss_function = nn.MSELoss()
 
 	elif dataset == 'omniglot':
 
-		model = OmniglotCNNModel(num_ways = 5)
-		task_distribution = OmniglotTaskDistribution(num_ways = 5, num_shots = 1)
+		model = OmniglotCNNModel(num_ways = cfg['num_ways'])
+		metatrain_task_distribution = OmniglotTaskDistribution(num_ways = cfg['num_ways'], num_shots = cfg['num_shots'], \
+																meta_split = 'train')
+		metaval_task_distribution = OmniglotTaskDistribution(num_ways = cfg['num_ways'], num_shots = cfg['num_shots'], \
+																meta_split = 'val')
 		loss_function = nn.CrossEntropyLoss()
+
+	LOGGER.info('Using {} dataset'.format(dataset))
 
 	meta_optimizer = optim.Adam(model.parameters(), lr = cfg['meta']['lr'])
 
-	# start = time.time()
-
-	meta_model = MAMLMetaLearner(model, 
-							task_distribution, 
+	meta_model = MAMLMetaLearner(model,
 							meta_optimizer, 
 							cfg['meta']['batch_size'], 
 							cfg['inner']['lr'], 
 							cfg['inner']['training_iterations'], 
 							cfg['inner']['batch_size'],
 							loss_function, 
+							device,
 							order = 1)
-	
-	# Wrap in a function, decide where to place
-	meta_test_task = task_distribution.sample_batch(batch_size = 1)
-	x_support, y_support = meta_test_task['train']
-	x_query, y_query = meta_test_task['test']
 
-	x_support = torch.squeeze(x_support, 0)
-	y_support = torch.squeeze(y_support)
-
-	x_query = torch.squeeze(x_query, 0)
-	y_query = torch.squeeze(y_query)
 
 	for meta_iter in range(cfg['meta']['training_iterations']):
 		
-		meta_train_loss = meta_model.train()
+		meta_train_loss = meta_model.train(metatrain_task_distribution)
 
 		'''
-		Meta-Testing
+		Meta-Validation
 		'''
-		if (meta_iter) % cfg['logs']['test_interval'] == 0:
-			meta_test_loss, meta_test_accuracy = meta_model.test(x_query, y_query, x_support, y_support) 
-			# fine_tune_loss = fine_tune_model(task)
-			writer.add_scalar('Loss/MetaTest', meta_test_loss.item(), meta_iter)
-			writer.add_scalar('Accuracy/MetaTest', meta_test_accuracy, meta_iter)
+		if (meta_iter) % cfg['logs']['val_interval'] == 0:
+			LOGGER.info('Performing meta-validation at meta-iteration: {}'.format(meta_iter))
+			meta_val_loss, meta_val_accuracy = meta_model.validate(metaval_task_distribution)
+			writer.add_scalar('Loss/MetaVal', meta_val_loss.item(), meta_iter)
+			writer.add_scalar('Accuracy/MetaVal', meta_val_accuracy, meta_iter)
 
 		'''
 		Logging Information
@@ -98,10 +102,9 @@ def main(cfg, run_id):
 				continue
 			
 			if meta_train_loss.item() < best_meta_train_loss:
+				LOGGER.info('Saving a better model at meta-iteration: {}'.format(meta_iter))
 				best_meta_train_loss = meta_train_loss.item()
 				torch.save(model.state_dict(), 'runs/{}/model.pth'.format(run_id))
-
-	# print(time.time() - start)
 
 if __name__ == '__main__':
 	
@@ -113,15 +116,18 @@ if __name__ == '__main__':
 
 	args = parser.parse_args()
 
+	init_logging()
+
 	with open(args.config) as f_in:
 		cfg = yaml.safe_load(f_in)
 	
 	run_id = random.randint(1, 100000)
-	print('Run ID: {}'.format(run_id))
+	LOGGER.info('Run ID: {}'.format(run_id))
 
 	if not os.path.exists('runs/{}'.format(run_id)):
 		os.makedirs('runs/{}'.format(run_id))
 
 	shutil.copy('config.yml', 'runs/{}/config.yml'.format(run_id))
+	LOGGER.info('Saved configuration file.')
 
 	main(cfg, run_id)
